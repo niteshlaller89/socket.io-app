@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Boards on Socket.IO</title>
+    <style>
+      body { margin: 0; padding-bottom: 3rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+      #form { background: rgba(0, 0, 0, 0.15); padding: 0.25rem; position: fixed; bottom: 0; left: 0; right: 0; display: flex; height: 3rem; box-sizing: border-box; backdrop-filter: blur(10px); }
+      #form > button { background: #333; border: none; padding: 0 1rem; margin: 0.25rem; border-radius: 3px; outline: none; color: #fff; }
+
+      #messages { list-style-type: none; margin: 0; padding: 0; }
+      #messages > li { padding: 0.5rem 1rem; }
+      #messages > li:nth-child(odd) { background: #efefef; }
+    </style>
+  </head>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <body>
+    <ul id="messages"></ul>
+    <form id="form" action="">
+      <input type="text" id="userName" placeholder="Enter your name">
+      <button id="connect">Connect</button>
+      <button id="disconnect">Disconnect</button>
+      <button id="subscribe">Subscribe</button>
+      <button id="unsubscribe">Unsubscribe</button>
+      <button id="draw">Draw</button>
+      <button id="createBoard">Create Board</button>
+      <button id="hideBoard">Hide Board</button>
+      <button id="deleteBoard">Delete Board</button>
+      <select id="boardDropdown"></select>
+    </form>
+        <script>
+            var socket = null;
+            var allBoards = [];
+            var selectedBoard = null;
+            var pathCount = 0;
+
+            var form = document.getElementById('form');
+            const addItem = (text) => {
+              var item = document.createElement('li');
+                item.textContent = text;
+                messages.appendChild(item);
+                window.scrollTo(0, document.body.scrollHeight);
+            };
+
+            function populateDropdown() {
+              var dropdown = document.getElementById('boardDropdown');
+              dropdown.innerHTML = ''; // Clear existing options
+
+              allBoards.forEach(function(board, index) {
+                var option = document.createElement('option');
+                option.value = index;
+                option.text = board.id; // You might want to adjust this based on your board object structure
+                dropdown.appendChild(option);
+              });
+            }
+
+            // Add event listeners for buttons
+            document.getElementById('connect').addEventListener('click', (e) => {
+              e.preventDefault();
+              var userName = document.getElementById('userName').value;
+              socket = io("ws://localhost:3000/board/sessionId1", {
+                auth: {
+                  token: {
+                    id: 'userId',
+                    role: 'host',
+                    name: userName
+                  }
+                }
+              });
+              socket.on('boards', function(payload) {
+                const { boards } = payload || {};
+                addItem("Initial Boards: " + JSON.stringify(boards));
+                allBoards = boards;
+                populateDropdown();      
+              });
+              socket.on('board:path:created', function(payload) {
+                const { id: pathId, userName } = payload || {};
+                addItem(`Path created by ${userName} with id: (${pathId})`);
+              });
+            });
+
+            document.getElementById('disconnect').addEventListener('click', (e) => {
+              e.preventDefault();
+              // Code to disconnect
+              // Example: socket.disconnect();
+            });
+
+            document.getElementById('subscribe').addEventListener('click', (e) => {
+              e.preventDefault();
+              var dropdown = document.getElementById('boardDropdown');
+              var boardId = allBoards[dropdown.selectedIndex].id;
+              socket.emit('board:subscribe', {id: boardId}, (board) => {
+                if("error" in board) {
+                  console.log("Not able to subscribe");
+                } else {
+                  selectedBoard = { id:boardId, ...board };
+                  addItem(`Subscribed Board (${boardId}): ${JSON.stringify(board)}`);
+                }
+              });
+            });
+
+            document.getElementById('createBoard').addEventListener('click', (e) => {
+              e.preventDefault();
+              socket.emit('board:created', {settings: {bgColor: "white"}, hidden: false}, (board) => {
+                if("error" in board) {
+                  console.log("Not able create board");
+                } else {
+                  allBoards.push(board);
+                  selectedBoard = board;
+                  populateDropdown();
+                  addItem(`Created Board (${board.id}): ${JSON.stringify(board)}`);
+                }
+              });
+            });
+
+            document.getElementById('unsubscribe').addEventListener('click', (e) => {
+              e.preventDefault();
+              // Code to unsubscribe
+              // Example: socket.emit('board:unsubscribe', { id: 'boardId' });
+            });
+
+            document.getElementById('draw').addEventListener('click', (e) => {
+              e.preventDefault();
+              const path = {
+                id: `p${pathCount}`,
+                boardId: `${selectedBoard.id}`,
+                isFinal: pathCount%5 === 0 ? true: false,
+                version: `p${pathCount}`,
+                data: `p${pathCount}`,
+                isDeleteAction: false
+              };
+              socket.emit('board:path:created', path, (response) => {
+                var userName = document.getElementById('userName').value;
+                addItem(`Path created by ${userName} with id: (${response.id})`);
+              });
+              pathCount+=1;
+            });
+        </script>
+    </body>
+</html>
